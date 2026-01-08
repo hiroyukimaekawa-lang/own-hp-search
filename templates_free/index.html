@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>テレアポ営業対象リスト作成ツール（無料版）</title>
+    <link rel="stylesheet" href="/static_free/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏨 テレアポ営業対象リスト作成ツール（無料版）</h1>
+            <p class="subtitle">施設名リストから営業対象を自動判定（API不使用・完全無料）</p>
+        </header>
+
+        <main>
+            <div class="upload-section">
+                <h2>📤 CSVファイルをアップロード</h2>
+                <form id="uploadForm" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <label for="file">CSVファイルを選択</label>
+                        <input type="file" id="file" name="file" accept=".csv" required>
+                        <small>※ A列に施設名（屋号）が含まれているCSVファイルをアップロードしてください</small>
+                    </div>
+
+                    <button type="submit" id="submitBtn" class="btn btn-primary">
+                        <span id="submitText">処理を開始</span>
+                        <span id="loadingSpinner" class="spinner" style="display: none;"></span>
+                    </button>
+                </form>
+            </div>
+
+            <div id="errorMessage" class="error-message" style="display: none;"></div>
+            <div id="successMessage" class="success-message" style="display: none;"></div>
+
+            <div id="progressSection" class="progress-section" style="display: none;">
+                <h3>処理状況</h3>
+                <div class="progress-bar">
+                    <div id="progressBar" class="progress-bar-fill"></div>
+                </div>
+                <p id="progressText" class="progress-text">処理中...</p>
+            </div>
+
+            <div id="resultSection" class="result-section" style="display: none;">
+                <h2>📊 処理結果</h2>
+                <div id="summary" class="summary"></div>
+                <button id="downloadBtn" class="btn btn-success">結果をCSVダウンロード</button>
+            </div>
+
+            <div class="info-section">
+                <h2>📋 使い方</h2>
+                <ol>
+                    <li>施設名（屋号）がA列に記載されたCSVファイルを準備してください</li>
+                    <li>CSVファイルをアップロードして「処理を開始」ボタンをクリック</li>
+                    <li>処理完了後、「結果をCSVダウンロード」ボタンで結果をダウンロード</li>
+                </ol>
+
+                <h3>入力CSV形式</h3>
+                <table class="example-table">
+                    <thead>
+                        <tr>
+                            <th>A列: 施設名</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>民宿 やしろ</td></tr>
+                        <tr><td>ペンション シーガル</td></tr>
+                        <tr><td>リゾートホテル ABC</td></tr>
+                    </tbody>
+                </table>
+
+                <h3>出力CSV形式</h3>
+                <table class="example-table">
+                    <thead>
+                        <tr>
+                            <th>A列: 施設名</th>
+                            <th>B列: HP URL</th>
+                            <th>C列: 営業対象</th>
+                            <th>D列: 都道府県</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>民宿 やしろ</td>
+                            <td></td>
+                            <td>はい</td>
+                            <td>東京都</td>
+                        </tr>
+                        <tr>
+                            <td>ペンション シーガル</td>
+                            <td>https://example.wixsite.com</td>
+                            <td>はい</td>
+                            <td>神奈川県</td>
+                        </tr>
+                        <tr>
+                            <td>リゾートホテル ABC</td>
+                            <td>https://example.com</td>
+                            <td>いいえ</td>
+                            <td>沖縄県</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>営業対象の判定条件</h3>
+                <ul>
+                    <li>公式HPが存在しない、または簡易HPサービス（WordPress/Wix/Canva/ペライチ/Jimdo）を使用している</li>
+                    <li>都道府県が沖縄県ではない</li>
+                </ul>
+
+                <h3>判定方法</h3>
+                <ol>
+                    <li>施設名 + " Google マップ" でGoogle検索</li>
+                    <li>GoogleビジネスプロフィールのページURLを取得</li>
+                    <li>ページHTMLを取得し以下を抽出：
+                        <ul>
+                            <li>「ウェブサイト」リンク</li>
+                            <li>住所</li>
+                        </ul>
+                    </li>
+                    <li>HPが存在しない場合 → 営業対象「はい」</li>
+                    <li>HPが存在する場合、簡易HPサービスかどうかを判定</li>
+                    <li>住所に「沖縄県」が含まれる場合は無条件で「いいえ」</li>
+                </ol>
+
+                <div class="note-box">
+                    <h4>⚠️ 注意事項</h4>
+                    <ul>
+                        <li>このアプリケーションは完全無料で、有料APIは使用しません</li>
+                        <li>Google検索とHTMLスクレイピングを使用するため、処理に時間がかかる場合があります</li>
+                        <li>Google検索の結果に依存するため、検索結果が見つからない場合は情報が取得できない場合があります</li>
+                        <li>大量のデータを処理する場合は、時間がかかる可能性があります</li>
+                    </ul>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const form = document.getElementById('uploadForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const submitText = document.getElementById('submitText');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const errorMessage = document.getElementById('errorMessage');
+        const successMessage = document.getElementById('successMessage');
+        const progressSection = document.getElementById('progressSection');
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        const resultSection = document.getElementById('resultSection');
+        const summary = document.getElementById('summary');
+        const downloadBtn = document.getElementById('downloadBtn');
+
+        let csvData = null;
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const fileInput = document.getElementById('file');
+            
+            if (!fileInput.files[0]) {
+                showError('ファイルを選択してください');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            // UI更新
+            submitBtn.disabled = true;
+            submitText.textContent = '処理中...';
+            loadingSpinner.style.display = 'inline-block';
+            errorMessage.style.display = 'none';
+            successMessage.style.display = 'none';
+            resultSection.style.display = 'none';
+            progressSection.style.display = 'block';
+            progressBar.style.width = '0%';
+            progressText.textContent = '処理を開始しています...';
+
+            try {
+                const response = await fetch('/api/process', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || '処理に失敗しました');
+                }
+
+                // CSVファイルをダウンロード
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = '営業対象リスト.csv';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+
+                // 進捗更新
+                progressBar.style.width = '100%';
+                progressText.textContent = '処理が完了しました！';
+
+                successMessage.textContent = '処理が完了しました！CSVファイルをダウンロードしました。';
+                successMessage.style.display = 'block';
+
+            } catch (error) {
+                showError(error.message);
+            } finally {
+                submitBtn.disabled = false;
+                submitText.textContent = '処理を開始';
+                loadingSpinner.style.display = 'none';
+            }
+        });
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
+

@@ -1,6 +1,6 @@
 """
-テレアポ営業用施設判定アプリケーション
-FastAPI + Google Places APIを使用して施設情報を判定
+テレアポ営業用施設判定アプリケーション（無料版）
+Google検索 + HTMLスクレイピングを使用して施設情報を判定
 """
 
 import os
@@ -13,37 +13,24 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi import Request
-from dotenv import load_dotenv
 import requests
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, quote
 import time
 from bs4 import BeautifulSoup
 
-# 環境変数の読み込み
-load_dotenv()
-
-app = FastAPI(title="テレアポ営業用施設判定アプリ")
+app = FastAPI(title="テレアポ営業用施設判定アプリ（無料版）")
 
 # 静的ファイルとテンプレートの設定
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-# Google Places API設定
-GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY")
-GOOGLE_PLACES_API_URL = "https://maps.googleapis.com/maps/api/place/findplacefromtext/json"
-
-# 簡易HPサービスのドメインリスト
-SIMPLE_HP_DOMAINS = [
-    "wix.com",
+# 簡易HPサービスのドメインリスト（無料版用）
+SIMPLE_HP_DOMAINS_FREE = [
     "wixsite.com",
     "wordpress.com",
-    "canva.com",
+    "canva.site",
     "peraichi.com",
-    "jimdo.com",
-    "jimdofree.com",
-    "amebaownd.com",
-    "fc2.com",
-    "coconala.com",
+    "jimdosite.com",
 ]
 
 # 離島のキーワードリスト
@@ -130,9 +117,9 @@ def is_island(address: str) -> bool:
     return False
 
 
-def is_simple_hp(url: str) -> bool:
+def is_simple_hp_free(url: str) -> bool:
     """
-    URLが簡易HPサービスかどうかを判定
+    URLが簡易HPサービスかどうかを判定（無料版用）
     
     Args:
         url: ウェブサイトURL
@@ -148,7 +135,7 @@ def is_simple_hp(url: str) -> bool:
         domain = parsed.netloc.lower().replace("www.", "")
         
         # 簡易HPサービスのドメインかチェック
-        for simple_domain in SIMPLE_HP_DOMAINS:
+        for simple_domain in SIMPLE_HP_DOMAINS_FREE:
             if simple_domain in domain:
                 return True
         
@@ -157,9 +144,9 @@ def is_simple_hp(url: str) -> bool:
         return False
 
 
-def check_website_technology(url: str) -> bool:
+def check_website_technology_free(url: str) -> bool:
     """
-    URLのHTMLを取得して、簡易HPサービスかどうかを判定
+    URLのHTMLを取得して、簡易HPサービスかどうかを判定（無料版用）
     
     Args:
         url: ウェブサイトURL
@@ -171,7 +158,7 @@ def check_website_technology(url: str) -> bool:
         return False
     
     # まずドメインベースの判定
-    if is_simple_hp(url):
+    if is_simple_hp_free(url):
         return True
     
     # HTMLを取得してmeta情報をチェック
@@ -183,16 +170,16 @@ def check_website_technology(url: str) -> bool:
         if response.status_code == 200:
             html_content = response.text.lower()
             
-            # WordPress判定
+            # WordPress判定（wp-contentまたはWordPressが含まれる）
             if "wp-content" in html_content or "wordpress" in html_content:
                 return True
             
             # Wix判定
-            if "wix.com" in html_content or "wixstatic.com" in html_content:
+            if "wixsite.com" in html_content or "wixstatic.com" in html_content:
                 return True
             
             # Canva判定
-            if "canva.com" in html_content:
+            if "canva.site" in html_content or "canva.com" in html_content:
                 return True
             
             # ペライチ判定
@@ -200,7 +187,7 @@ def check_website_technology(url: str) -> bool:
                 return True
             
             # Jimdo判定
-            if "jimdo.com" in html_content or "jimdo" in html_content:
+            if "jimdosite.com" in html_content or "jimdo" in html_content:
                 return True
         
     except Exception:
@@ -210,57 +197,136 @@ def check_website_technology(url: str) -> bool:
     return False
 
 
-def search_google_places(facility_name: str) -> Optional[Dict]:
+def search_google_maps(facility_name: str) -> Optional[str]:
     """
-    Google Places APIを使用して施設情報を検索
+    Google検索で「施設名 Google マップ」を検索し、GoogleビジネスプロフィールのURLを取得
     
     Args:
         facility_name: 施設名
         
     Returns:
-        施設情報の辞書（website, formatted_address）またはNone
+        GoogleビジネスプロフィールのURLまたはNone
     """
-    if not GOOGLE_PLACES_API_KEY:
-        raise HTTPException(
-            status_code=500,
-            detail="Google Places APIキーが設定されていません"
-        )
-    
-    params = {
-        "input": facility_name,
-        "inputtype": "textquery",
-        "fields": "formatted_address,name,website",
-        "key": GOOGLE_PLACES_API_KEY,
-        "language": "ja",
-    }
+    query = f"{facility_name} Google マップ"
+    search_url = f"https://www.google.com/search?q={quote(query)}&hl=ja"
     
     try:
-        response = requests.get(GOOGLE_PLACES_API_URL, params=params, timeout=10)
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        }
+        
+        response = requests.get(search_url, headers=headers, timeout=10)
         
         if response.status_code != 200:
             return None
         
-        data = response.json()
+        soup = BeautifulSoup(response.text, "html.parser")
         
-        if data.get("status") != "OK" or not data.get("candidates"):
+        # Googleマップのリンクを探す
+        # 検索結果からmaps.google.comまたはビジネスプロフィールのURLを探す
+        links = soup.find_all("a", href=True)
+        
+        for link in links:
+            href = link.get("href", "")
+            if "maps.google.com" in href or "google.com/maps" in href:
+                # URLを正規化
+                if href.startswith("/url?q="):
+                    href = href.split("/url?q=")[1].split("&")[0]
+                elif href.startswith("/search?q="):
+                    continue
+                
+                # ビジネスプロフィールのURLかチェック
+                if "/maps/place/" in href or "/maps/search/" in href:
+                    return href
+        
         return None
-        
-        candidate = data["candidates"][0]
-        
-        return {
-            "website": candidate.get("website", ""),
-            "formatted_address": candidate.get("formatted_address", ""),
-            "name": candidate.get("name", ""),
-        }
     
     except Exception as e:
-        print(f"Google Places API エラー ({facility_name}): {e}")
+        print(f"Google検索エラー ({facility_name}): {e}")
         return None
 
 
-def judge_target(facility_name: str, website: str, address: str) -> Dict:
+def extract_info_from_google_business(url: str) -> Dict:
     """
-    施設が営業対象かどうかを判定
+    Googleビジネスプロフィールのページからウェブサイトリンクと住所を抽出
+    
+    Args:
+        url: GoogleビジネスプロフィールのURL
+        
+    Returns:
+        施設情報の辞書（website, address）
+    """
+    website = ""
+    address = ""
+    
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        }
+        
+        response = requests.get(url, headers=headers, timeout=10)
+        
+        if response.status_code != 200:
+            return {"website": website, "address": address}
+        
+        soup = BeautifulSoup(response.text, "html.parser")
+        
+        # ウェブサイトリンクを探す
+        # 「ウェブサイト」というテキストを含むリンクを探す
+        links = soup.find_all("a", href=True)
+        for link in links:
+            link_text = link.get_text(strip=True)
+            href = link.get("href", "")
+            
+            if "ウェブサイト" in link_text or "website" in link_text.lower():
+                if href.startswith("http"):
+                    website = href
+                    break
+                elif href.startswith("/url?q="):
+                    website = href.split("/url?q=")[1].split("&")[0]
+                    break
+        
+        # 住所を探す
+        # 「住所」というテキストの後に続くテキストを探す
+        address_elements = soup.find_all(text=re.compile(r"住所|Address"))
+        for elem in address_elements:
+            parent = elem.parent
+            if parent:
+                # 次の要素を探す
+                next_sibling = parent.find_next_sibling()
+                if next_sibling:
+                    address_text = next_sibling.get_text(strip=True)
+                    if address_text:
+                        address = address_text
+                        break
+        
+        # 住所が見つからない場合、data属性から探す
+        if not address:
+            address_divs = soup.find_all(attrs={"data-value": re.compile(r"^[^0-9]*[都道府県]")})
+            for div in address_divs:
+                address_text = div.get_text(strip=True)
+                if address_text:
+                    address = address_text
+                    break
+        
+        # 住所が見つからない場合、class名から探す
+        if not address:
+            address_elements = soup.find_all(class_=re.compile(r"address|住所|location"))
+            for elem in address_elements:
+                address_text = elem.get_text(strip=True)
+                if address_text and ("都" in address_text or "府" in address_text or "県" in address_text or "道" in address_text):
+                    address = address_text
+                    break
+    
+    except Exception as e:
+        print(f"Googleビジネスプロフィール抽出エラー: {e}")
+    
+    return {"website": website, "address": address}
+
+
+def judge_target_free(facility_name: str, website: str, address: str) -> Dict:
+    """
+    施設が営業対象かどうかを判定（無料版）
     
     Args:
         facility_name: 施設名
@@ -273,16 +339,6 @@ def judge_target(facility_name: str, website: str, address: str) -> Dict:
     # 都道府県を抽出
     prefecture = extract_prefecture(address)
     
-    # 離島チェック
-    if is_island(address):
-        return {
-            "facility_name": facility_name,
-            "website": "",
-            "is_target": "いいえ",
-            "prefecture": prefecture,
-            "reason": "離島のため除外",
-        }
-    
     # 沖縄県チェック
     if prefecture == "沖縄県":
         return {
@@ -291,6 +347,16 @@ def judge_target(facility_name: str, website: str, address: str) -> Dict:
             "is_target": "いいえ",
             "prefecture": prefecture,
             "reason": "沖縄県のため除外",
+        }
+    
+    # 離島チェック
+    if is_island(address):
+        return {
+            "facility_name": facility_name,
+            "website": "",
+            "is_target": "いいえ",
+            "prefecture": prefecture,
+            "reason": "離島のため除外",
         }
     
     # ウェブサイトが存在しない場合
@@ -304,7 +370,7 @@ def judge_target(facility_name: str, website: str, address: str) -> Dict:
         }
     
     # ウェブサイトが存在する場合、簡易HPかどうかをチェック
-    is_simple = check_website_technology(website)
+    is_simple = check_website_technology_free(website)
     
     if is_simple:
         return {
@@ -327,28 +393,19 @@ def judge_target(facility_name: str, website: str, address: str) -> Dict:
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
     """メインページ"""
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse("index_free.html", {"request": request})
 
 
 @app.post("/api/process")
 async def process_csv(
     file: UploadFile = File(...),
-    simple_mode: bool = Form(False),
 ):
     """
-    CSVファイルを処理して結果を返す
+    CSVファイルを処理して結果を返す（無料版）
     
     Args:
         file: アップロードされたCSVファイル
-        simple_mode: 簡易モード（websiteが空の施設のみ抽出）
     """
-    # APIキーのチェック
-    if not GOOGLE_PLACES_API_KEY:
-        raise HTTPException(
-            status_code=500,
-            detail="Google Places APIキーが設定されていません。環境変数GOOGLE_PLACES_API_KEYを設定してください。"
-        )
-    
     if not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="CSVファイルをアップロードしてください")
     
@@ -385,42 +442,25 @@ async def process_csv(
     for idx, facility_name in enumerate(facilities):
         print(f"処理中: {idx + 1}/{total} - {facility_name}")
         
-        # Google Places APIで検索
-        place_info = search_google_places(facility_name)
+        # Google検索でGoogleマップのURLを取得
+        maps_url = search_google_maps(facility_name)
         
-        if place_info:
+        if maps_url:
+            # Googleビジネスプロフィールから情報を抽出
+            place_info = extract_info_from_google_business(maps_url)
             website = place_info.get("website", "")
-            address = place_info.get("formatted_address", "")
+            address = place_info.get("address", "")
         else:
             website = ""
             address = ""
         
-        # 簡易モードの場合
-        if simple_mode:
-            if not website or website.strip() == "":
-                prefecture = extract_prefecture(address)
-                if is_island(address) or prefecture == "沖縄県":
-                    is_target = "いいえ"
-                else:
-                    is_target = "はい"
-            else:
-                is_target = "いいえ"
-                prefecture = extract_prefecture(address)
-            
-            results.append({
-                "facility_name": facility_name,
-                "website": website,
-                "is_target": is_target,
-                "prefecture": prefecture,
-            })
-        else:
-            # 通常モード：詳細判定
-            result = judge_target(facility_name, website, address)
-            results.append(result)
+        # 判定実行
+        result = judge_target_free(facility_name, website, address)
+        results.append(result)
         
-        # API制限対策（最後の1件は待機不要）
+        # レート制限対策（最後の1件は待機不要）
         if idx < total - 1:
-            time.sleep(0.1)  # 100ms待機
+            time.sleep(1.0)  # 1秒待機
     
     # CSVを生成
     output = io.StringIO()
@@ -450,5 +490,5 @@ async def process_csv(
 if __name__ == "__main__":
     import uvicorn
     
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8001)
 
