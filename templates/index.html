@@ -22,13 +22,20 @@
                         <input type="file" id="file" name="file" accept=".csv" required>
                         <small>※ A列に施設名（屋号）が含まれているCSVファイルをアップロードしてください</small>
                     </div>
-                    
+
                     <div class="form-group">
-                        <label>
-                            <input type="checkbox" id="simpleMode" name="simple_mode">
-                            簡易モード（Googleビジネスプロフィール上にwebサイトが登録されていない施設のみ抽出）
-                        </label>
+                        <label><strong>使用API: SerpAPI</strong></label>
+                        <div class="api-info">
+                            <p>🔍 Google検索結果を安定して取得するAPIを使用します</p>
+                        </div>
                     </div>
+
+                    <div class="form-group">
+                        <label for="serpapiKey">SerpAPIキー</label>
+                        <input type="text" id="serpapiKey" name="serpapi_key" placeholder="7f319edbccde7eaa91d73398346def20ddb65e7f0f13cedc32ba60b4b7ba762f" value="7f319edbccde7eaa91d73398346def20ddb65e7f0f13cedc32ba60b4b7ba762f" required>
+                        <small>SerpAPIを使用するために必要です（無料プラン: 月100回まで利用可能）</small>
+                    </div>
+
 
                     <button type="submit" id="submitBtn" class="btn btn-primary">
                         <span id="submitText">処理を開始</span>
@@ -57,9 +64,26 @@
             <div class="info-section">
                 <h2>📋 使い方</h2>
                 <ol>
+                    <li>使用するアプリ版を選択してください（Google Places API版 / 無料版 / SerpAPI版）</li>
+                    <li>SerpAPI版を選択した場合は、SerpAPIキーを入力してください</li>
                     <li>施設名（屋号）がA列に記載されたCSVファイルを準備してください</li>
                     <li>CSVファイルをアップロードして「処理を開始」ボタンをクリック</li>
-                    <li>処理完了後、「結果をCSVダウンロード」ボタンで結果をダウンロード</li>
+                    <li>処理完了後、CSVファイルが自動的にダウンロードされます</li>
+                </ol>
+
+                <h3>SerpAPIについて</h3>
+                <ul>
+                    <li><strong>安定した検索結果:</strong> HTMLスクレイピングよりも安定したGoogle検索結果を取得</li>
+                    <li><strong>無料プランあり:</strong> 月100回まで無料で利用可能</li>
+                    <li><strong>有料プラン:</strong> より多くのリクエストが必要な場合は有料プランも利用可能</li>
+                </ul>
+
+                <h3>SerpAPIキーの取得方法</h3>
+                <ol>
+                    <li><a href="https://serpapi.com/" target="_blank">SerpAPI公式サイト</a>にアクセス</li>
+                    <li>無料アカウントを作成</li>
+                    <li>APIキーを取得（画面に表示されているキーを使用可能）</li>
+                    <li>必要に応じて有料プランにアップグレード</li>
                 </ol>
 
                 <h3>入力CSV形式</h3>
@@ -132,16 +156,22 @@
             e.preventDefault();
             
             const fileInput = document.getElementById('file');
-            const simpleMode = document.getElementById('simpleMode').checked;
-            
+            const serpapiKey = document.getElementById('serpapiKey').value;
+
             if (!fileInput.files[0]) {
                 showError('ファイルを選択してください');
                 return;
             }
 
+            if (!serpapiKey.trim()) {
+                showError('SerpAPIキーを入力してください');
+                return;
+            }
+
             const formData = new FormData();
             formData.append('file', fileInput.files[0]);
-            formData.append('simple_mode', simpleMode);
+            formData.append('app_version', 'serpapi');
+            formData.append('serpapi_key', serpapiKey);
 
             // UI更新
             submitBtn.disabled = true;
